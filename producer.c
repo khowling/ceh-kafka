@@ -30,27 +30,28 @@ int main (int argc, char **argv) {
     const char *eh_name = getenv("EH_NAME");
 
     // Check if required environment variables are set
-    if (!client_id || !client_secret || !token_endpoint || !eh_name) {
+    if (!eh_name) {
         g_error("Required environment variables not set. Please set:\n"
-                "CLIENT_ID\n"
-                "CLIENT_SECRET\n"
-                "TOKEN_ENDPOINT\n"
                 "EH_NAME");
         return 1;
     }
+
+
     // Create client configuration
     conf = rd_kafka_conf_new();
 
-    // khauthtest
-    set_config(conf, "sasl.oauthbearer.method", "OIDC");
-    set_config(conf, "sasl.oauthbearer.client.id", client_id);
-    set_config(conf, "sasl.oauthbearer.client.secret",  client_secret);
-    set_config(conf, "sasl.oauthbearer.token.endpoint.url", token_endpoint);
-    
-    char scope[256];
-    snprintf(scope, sizeof(scope), "https://%s.servicebus.windows.net/.default", eh_name);
-    set_config(conf, "sasl.oauthbearer.scope", scope);
-    //set_config(conf, "sasl.oauthbearer.extensions",         "logicalCluster=<LOGICAL CLUSTER ID>,identityPoolId=<IDENTITY POOL ID>");
+    if (!client_id || !client_secret || !token_endpoint || !eh_name) {
+        rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, oauth_cb);
+    } else {
+        set_config(conf, "sasl.oauthbearer.method", "OIDC");
+        set_config(conf, "sasl.oauthbearer.client.id", client_id);
+        set_config(conf, "sasl.oauthbearer.client.secret",  client_secret);
+        set_config(conf, "sasl.oauthbearer.token.endpoint.url", token_endpoint);
+
+        char scope[256];
+        snprintf(scope, sizeof(scope), "https://%s.servicebus.windows.net/.default", eh_name);
+        set_config(conf, "sasl.oauthbearer.scope", scope);
+    }
 
 
     char bootstrap_servers[256];
@@ -59,10 +60,6 @@ int main (int argc, char **argv) {
     set_config(conf, "security.protocol", "SASL_SSL");
     set_config(conf, "sasl.mechanism", "OAUTHBEARER");
     set_config(conf, "acks",                    "all");
-
-
-    //set_config(conf, "sasl.jaas.config", "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;");
-    //set_config(conf, "sasl.login.callback.handler.class", "CustomAuthenticateCallbackHandler;");
 
     // Fixed properties
     set_config(conf, "acks", "all");
