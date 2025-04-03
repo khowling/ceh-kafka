@@ -118,12 +118,12 @@ char* get_token_from_imds(const char* resource) {
     return token;
 }
 
-static int oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
+static void oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
 
     const char *eh_name = getenv("EH_NAME");
     if (!eh_name) {
         rd_kafka_oauthbearer_set_token_failure(rk, "EH_NAME not set");
-        return -1;
+        return;// -1;
     }
 
     char resource[256];
@@ -132,7 +132,7 @@ static int oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque
     char *token = get_token_from_imds(resource);
     if (!token) {
         rd_kafka_oauthbearer_set_token_failure(rk, "Failed to retrieve token from IMDS");
-        return -1;
+        return;// -1;
     }
 
     // debug got token
@@ -156,8 +156,8 @@ static int oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque
         //const char *err_str = rd_kafka_error_string(error);
         rd_kafka_oauthbearer_set_token_failure(rk, err_str);
         //rd_kafka_error_destroy(error);
-        return -1;
+        return;// -1;
     }
 
-    return 0;
+    //return 0;
 }

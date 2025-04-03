@@ -22,17 +22,24 @@ int main (int argc, char **argv) {
     const char *client_secret = getenv("CLIENT_SECRET");
     const char *token_endpoint = getenv("TOKEN_ENDPOINT");
     const char *eh_name = getenv("EH_NAME");
+    const char *topic = getenv("TOPIC");
 
     // Check if required environment variables are set
-    if (!eh_name) {
+    if (!eh_name || !topic) {
         g_error("Required environment variables not set. Please set:\n"
+                "TOPIC\n"
                 "EH_NAME");
         return 1;
     }
 
-
     // Create client configuration
     conf = rd_kafka_conf_new();
+
+    char bootstrap_servers[256];
+    snprintf(bootstrap_servers, sizeof(bootstrap_servers), "%s.servicebus.windows.net:9093", eh_name);
+    set_config(conf, "bootstrap.servers", bootstrap_servers);
+    set_config(conf, "security.protocol", "SASL_SSL");
+    set_config(conf, "sasl.mechanism", "OAUTHBEARER");
 
     if (!client_id || !client_secret || !token_endpoint || !eh_name) {
         rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, oauth_cb);
@@ -47,16 +54,8 @@ int main (int argc, char **argv) {
         set_config(conf, "sasl.oauthbearer.scope", scope);
     }
 
-
-    char bootstrap_servers[256];
-    snprintf(bootstrap_servers, sizeof(bootstrap_servers), "%s.servicebus.windows.net:9093", eh_name);
-
-    set_config(conf, "security.protocol", "SASL_SSL");
-    set_config(conf, "sasl.mechanism", "OAUTHBEARER");
-    set_config(conf, "acks",                    "all");
-
     // Fixed properties
-    set_config(conf, "group.id",          "kafka-c-getting-started");
+    set_config(conf, "group.id",          "$Default");
     set_config(conf, "auto.offset.reset", "earliest");
 
     // Create the Consumer instance.
@@ -71,7 +70,6 @@ int main (int argc, char **argv) {
     conf = NULL;
 
     // Convert the list of topics to a format suitable for librdkafka.
-    const char *topic = "hub1";
     rd_kafka_topic_partition_list_t *subscription = rd_kafka_topic_partition_list_new(1);
     rd_kafka_topic_partition_list_add(subscription, topic, RD_KAFKA_PARTITION_UA);
 
