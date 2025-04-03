@@ -1,0 +1,29 @@
+FROM mcr.microsoft.com/devcontainers/cpp:1-debian-11
+
+ARG REINSTALL_CMAKE_VERSION_FROM_SOURCE="none"
+
+# Optionally install the cmake for vcpkg
+COPY ./reinstall-cmake.sh /tmp/
+
+RUN if [ "${REINSTALL_CMAKE_VERSION_FROM_SOURCE}" != "none" ]; then \
+        chmod +x /tmp/reinstall-cmake.sh && /tmp/reinstall-cmake.sh ${REINSTALL_CMAKE_VERSION_FROM_SOURCE}; \
+    fi \
+    && rm -f /tmp/reinstall-cmake.sh
+
+# [Optional] Uncomment this section to install additional packages.
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends \
+    libglib2.0-dev \
+    libsasl2-dev \
+    liblz4-dev 
+
+# Add Confluent repository for librdkafka
+RUN mkdir -p /etc/apt/keyrings && \
+    wget -qO - https://packages.confluent.io/deb/7.9/archive.key | tee /etc/apt/keyrings/confluent-archive-keyring.gpg | gpg \
+    --dearmor | tee /etc/apt/keyrings/confluent-archive.gpg > /dev/null && \
+    echo "deb [signed-by=/etc/apt/keyrings/confluent-archive.gpg] https://packages.confluent.io/deb/7.9 stable main" > /etc/apt/sources.list.d/confluent.list && \
+    echo "deb [signed-by=/etc/apt/keyrings/confluent-archive.gpg] https://packages.confluent.io/clients/deb $(lsb_release -cs) main" >> /etc/apt/sources.list.d/confluent.list
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends librdkafka-dev
+
