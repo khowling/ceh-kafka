@@ -1,7 +1,7 @@
 #include <glib.h>
 #include <librdkafka/rdkafka.h>
 
-#include "common.c"
+#include "man_id.h"
 
 static volatile sig_atomic_t run = 1;
 
@@ -18,11 +18,15 @@ int main (int argc, char **argv) {
     rd_kafka_resp_err_t err;
     char errstr[512];
 
+    const char *eh_name = getenv("EH_NAME");
     const char *client_id = getenv("CLIENT_ID");
+    const char *topic = getenv("TOPIC");
+
+    // Required for Service Principle Auth, NOT for Managed Identity
     const char *client_secret = getenv("CLIENT_SECRET");
     const char *token_endpoint = getenv("TOKEN_ENDPOINT");
-    const char *eh_name = getenv("EH_NAME");
-    const char *topic = getenv("TOPIC");
+
+
 
     // Check if required environment variables are set
     if (!eh_name || !topic) {
@@ -41,9 +45,17 @@ int main (int argc, char **argv) {
     set_config(conf, "security.protocol", "SASL_SSL");
     set_config(conf, "sasl.mechanism", "OAUTHBEARER");
 
-    if (!client_id || !client_secret || !token_endpoint || !eh_name) {
+    if (!client_secret && !token_endpoint ) {
+        // If not Client secret and token endpoint provided, assume will use Managed Identity, so reqister the callback
+        man_id_t *man_id = g_malloc(sizeof(man_id_t));
+        man_id->client_id = client_id;
+        man_id->eh_name = eh_name;
+
+        rd_kafka_conf_set_opaque(conf, man_id);
         rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, oauth_cb);
+
     } else {
+        
         set_config(conf, "sasl.oauthbearer.method", "OIDC");
         set_config(conf, "sasl.oauthbearer.client.id", client_id);
         set_config(conf, "sasl.oauthbearer.client.secret",  client_secret);

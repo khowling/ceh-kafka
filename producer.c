@@ -2,7 +2,7 @@
 #include <librdkafka/rdkafka.h>
 #include <stdlib.h> // For getenv()
 
-#include "common.c"
+#include "man_id.h"
 
 #define ARR_SIZE(arr) ( sizeof((arr)) / sizeof((arr[0])) )
 
@@ -24,11 +24,13 @@ int main (int argc, char **argv) {
     rd_kafka_conf_t *conf;
     char errstr[512];
 
+    const char *eh_name = getenv("EH_NAME");
     const char *client_id = getenv("CLIENT_ID");
+    const char *topic = getenv("TOPIC");
+
+    // Required for Service Principle Auth, NOT for Managed Identity
     const char *client_secret = getenv("CLIENT_SECRET");
     const char *token_endpoint = getenv("TOKEN_ENDPOINT");
-    const char *eh_name = getenv("EH_NAME");
-    const char *topic = getenv("TOPIC");
 
     // Check if required environment variables are set
     if (!eh_name || !topic) {
@@ -47,8 +49,15 @@ int main (int argc, char **argv) {
     set_config(conf, "security.protocol", "SASL_SSL");
     set_config(conf, "sasl.mechanism", "OAUTHBEARER");
 
-    if (!client_id || !client_secret || !token_endpoint || !eh_name) {
+    if (!client_secret && !token_endpoint ) {
+        // If not Client secret and token endpoint provided, assume will use Managed Identity, so reqister the callback
+        man_id_t *man_id = g_malloc(sizeof(man_id_t));
+        man_id->client_id = client_id;
+        man_id->eh_name = eh_name;
+
+        rd_kafka_conf_set_opaque(conf, man_id);
         rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, oauth_cb);
+
     } else {
         set_config(conf, "sasl.oauthbearer.method", "OIDC");
         set_config(conf, "sasl.oauthbearer.client.id", client_id);
@@ -89,13 +98,20 @@ int main (int argc, char **argv) {
 
         rd_kafka_resp_err_t err;
 
+        const char *header_key = "RicName";
+        const char *header_value = "LSEG-XXXX";
+
+        rd_kafka_headers_t *headers = rd_kafka_headers_new(1);
+        rd_kafka_header_add(headers, header_key, -1, header_value, strlen(header_value));
+
         err = rd_kafka_producev(producer,
-                                RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_KEY((void*)key, key_len),
-                                RD_KAFKA_V_VALUE((void*)value, value_len),
-                                RD_KAFKA_V_OPAQUE(NULL),
-                                RD_KAFKA_V_END);
+                    RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                    RD_KAFKA_V_KEY((void*)key, key_len),
+                    RD_KAFKA_V_VALUE((void*)value, value_len),
+                    RD_KAFKA_V_HEADERS(headers),
+                    RD_KAFKA_V_OPAQUE(NULL),
+                    RD_KAFKA_V_END);
 
         if (err) {
             g_error("Failed to produce to topic %s: %s", topic, rd_kafka_err2str(err));

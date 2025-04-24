@@ -1,0 +1,30 @@
+# Stage 1: Build the C binary on Fedora
+FROM fedora:latest AS builder
+
+# Update system packages and install tools
+RUN dnf update -y && \
+    dnf install -y gcc make \
+    libevent-devel \
+    jemalloc \
+    glib2-devel \
+    libcurl-devel \
+    openssl-devel \
+    gawk
+
+RUN rpm --import https://packages.confluent.io/rpm/7.9/archive.key && \
+    echo $'[Confluent-Clients] \n\
+name=Confluent Clients repository \n\
+baseurl=https://packages.confluent.io/clients/rpm/centos/$releasever/$basearch \n\
+gpgcheck=1 \n\
+gpgkey=https://packages.confluent.io/clients/rpm/archive.key \n\
+enabled=1' > /etc/yum.repos.d/confluent.repo && \
+    yum clean all && \
+    yum install -y librdkafka-devel
+
+
+1
+# Set the default working directory
+WORKDIR /workspaces
+
+# Provide a command to verify tools (optional)
+CMD ["gcc", "--version"]

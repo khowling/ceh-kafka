@@ -4,10 +4,11 @@
 #include <stdlib.h> // For getenv()
 #include <curl/curl.h> // For HTTP requests
 
+#include "man_id.h"
 
 /* Wrapper to set config values and error out if needed.
  */
-static void set_config(rd_kafka_conf_t *conf, char *key, const char *value) {
+void set_config(rd_kafka_conf_t *conf, char *key, const char *value) {
     char errstr[512];
     rd_kafka_conf_res_t res;
 
@@ -47,7 +48,7 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
 }
 
 // Function to get token from Azure Instance Metadata Service
-char* get_token_from_imds(const char* resource) {
+char* get_token_from_imds(const char* resource, const char* client_id) {
     CURL *curl;
     CURLcode res;
     struct MemoryStruct chunk;
@@ -60,10 +61,16 @@ char* get_token_from_imds(const char* resource) {
     curl = curl_easy_init();
     
     if(curl) {
+       
         char url[512];
         snprintf(url, sizeof(url), 
-                "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=%s",
-                resource);
+            "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=%s",  resource);
+        
+        if (client_id && client_id[0]) {
+            char tmp[512];
+            snprintf(tmp, sizeof(tmp), "%s&client_id=%s", url, client_id);
+            snprintf(url, sizeof(url), tmp);
+        }
         
         fprintf(stderr, "Attempting to get token from: %s\n", url);
 
@@ -118,18 +125,19 @@ char* get_token_from_imds(const char* resource) {
     return token;
 }
 
-static void oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
+void oauth_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
 
-    const char *eh_name = getenv("EH_NAME");
-    if (!eh_name) {
+    man_id_t *ctx = (man_id_t *)opaque;
+
+    if (!ctx->eh_name) {
         rd_kafka_oauthbearer_set_token_failure(rk, "EH_NAME not set");
         return;// -1;
     }
 
     char resource[256];
-    snprintf(resource, sizeof(resource), "https://%s.servicebus.windows.net/", eh_name);
+    snprintf(resource, sizeof(resource), "https://%s.servicebus.windows.net/", ctx->eh_name);
 
-    char *token = get_token_from_imds(resource);
+    char *token = get_token_from_imds(resource, ctx->client_id);
     if (!token) {
         rd_kafka_oauthbearer_set_token_failure(rk, "Failed to retrieve token from IMDS");
         return;// -1;

@@ -1,0 +1,51 @@
+# Stage 1: Build the C binary on Fedora
+# Stage 1: Build the C binary on Fedora
+FROM fedora:latest AS builder
+
+# Update system packages and install tools
+RUN dnf update -y && \
+    dnf install gcc make automake libevent-devel jemalloc glib2-devel libcurl-devel -y
+
+# Install Static Libraries
+RUN dnf update -y && \
+    dnf install glib2-static pcre2-static zlib-static libzstd-static lz4-static -y
+
+
+RUN rpm --import https://packages.confluent.io/rpm/7.9/archive.key && \
+    echo $'[Confluent-Clients] \n\
+name=Confluent Clients repository \n\
+baseurl=https://packages.confluent.io/clients/rpm/centos/$releasever/$basearch \n\
+gpgcheck=1 \n\
+gpgkey=https://packages.confluent.io/clients/rpm/archive.key \n\
+enabled=1' > /etc/yum.repos.d/confluent.repo && \
+    yum clean all && \
+    yum install -y librdkafka-devel
+
+
+
+# Set working directory
+WORKDIR /app
+
+# Copy source code to container
+COPY producer.c common.c Makefile .
+
+# Compile the C program
+RUN make producer
+
+# Stage 2: Copy the binary to an Azure Linux image
+# FROM mcr.microsoft.com/azurelinux/base/core:3.0 AS runtime
+FROM fedora:latest AS runtime
+
+RUN dnf update -y && dnf install -y glib2 && dnf clean all
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/producer .
+
+ENV TOPIC=""
+ENV EH_NAME=""
+
+# Set the entrypoint
+ENTRYPOINT ["./producer"]
